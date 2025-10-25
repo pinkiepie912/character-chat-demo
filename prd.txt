@@ -1,0 +1,592 @@
+## Project goal
+* 주어진 캐릭터와 유저가 채팅을 통해 서로의 관계를 발전시키는 캐릭터 챗을 만든다.
+* 각 캐릭터는 고유한 성격, 배경 이야기, 관심사를 가지고 있어야 한다.
+* 유저는 캐릭터와 대화하면서 친밀도를 높이고, 캐릭터의 이야기를 더 깊이 탐구할 수 있다.
+
+## Features
+1. **Character Profiles**
+    * 각 캐릭터는 이름, 나이, 성격, 배경 이야기, 관심사 등의 정보를 포함한 프로필을 가진다.
+    * 프로필은 유저가 캐릭터를 선택할 때 참고할 수 있도록 제공된다.
+2. **Chat Interface**
+    * 유저는 채팅 인터페이스를 통해 캐릭터와 대화할 수 있다.
+    * 채팅 인터페이스는 직관적이고 사용하기 쉬워야 한다.
+3. **Dynamic Responses**
+    * 캐릭터는 유저의 입력에 따라 동적으로 반응한다.
+    * 캐릭터의 반응은 그들의 성격과 배경 이야기에 맞게 설계된다.
+4. **Relationship Building**
+    * 유저가 캐릭터와 대화할 때마다 친밀도가 상승한다
+    * 친밀도가 일정 수준에 도달하면 캐릭터의 새로운 이야기나 비밀이 공개된다.
+5. **Multiple Endings**
+    * 유저의 선택과 대화 내용에 따라 캐릭터와의 관계가 달라지며, 다양한 엔딩이 존재한다.
+    * 각 엔딩은 캐릭터의 성격과 이야기와 일관되게 설계된다.
+6. **Save and Load**
+    * 유저는 자신의 진행 상황을 저장하고 나중에 불러올 수 있다
+    * 저장된 데이터에는 캐릭터와의 친밀도, 대화 내용 등이 포함된다.
+7. **Episodes**
+    * 캐릭터와의 대화는 여러 에피소드로 나누어져 있으며, 각 에피소드는 특정 주제나 이벤트를 중심으로 진행된다.
+    * 유저는 에피소드를 완료하면서 캐릭터와의 관계를 더욱 깊이 있게 발전시킬 수 있다.
+
+## Technical Requirements
+* 플랫폼: 웹 기반 애플리케이션
+* 언어: TypeScript, HTML, CSS
+* 프레임워크: Next.js 14 (App Router)
+* 데이터베이스: Supabase (PostgreSQL)
+* AI 모델: Openrouter GPT-4.1-mini
+* 인증: Supabase Auth
+* 스타일링: Tailwind CSS
+* 상태 관리: React Context API / Zustand
+* 배포: Vercel
+
+## System Architecture
+
+### High-Level Architecture
+```
+Client (Next.js) ←→ API Routes ←→ Supabase ←→ PostgreSQL
+                      ↓
+                  Openrouter API (GPT-4.1-mini)
+```
+
+### Component Structure
+```
+/app
+  /layout.tsx
+  /page.tsx
+  /(auth)
+    /login/page.tsx
+    /signup/page.tsx
+  /characters/page.tsx
+  /chat/[characterId]/page.tsx
+/components
+  /character/
+    CharacterCard.tsx
+    CharacterProfile.tsx
+    CharacterSelector.tsx
+  /chat/
+    ChatInterface.tsx
+    MessageBubble.tsx
+    InputBox.tsx
+  /ui/
+    Button.tsx
+    Progress.tsx
+    Dialog.tsx
+/lib
+  /supabase/
+    client.ts
+    server.ts
+  /openrouter/
+    chat.ts
+  /types/
+    character.ts
+    message.ts
+    relationship.ts
+```
+
+## Data Models
+
+### User
+```typescript
+interface User {
+  id: string; // UUID (Supabase Auth)
+  email: string;
+  username: string;
+  created_at: timestamp;
+  updated_at: timestamp;
+}
+```
+
+### Character
+```typescript
+interface Character {
+  id: string; // UUID
+  name: string;
+  age: number;
+  personality: string[]; // ["friendly", "mysterious", "optimistic"]
+  background_story: string;
+  interests: string[];
+  avatar_url: string;
+  system_prompt: string; // AI 모델에 전달될 캐릭터 설정
+  created_at: timestamp;
+  updated_at: timestamp;
+}
+```
+
+### Relationship
+```typescript
+interface Relationship {
+  id: string; // UUID
+  user_id: string; // FK → users
+  character_id: string; // FK → characters
+  intimacy_level: number; // 0-100
+  current_episode: number;
+  unlocked_secrets: string[]; // 공개된 비밀 ID 목록
+  relationship_status: 'stranger' | 'acquaintance' | 'friend' | 'close_friend' | 'special';
+  created_at: timestamp;
+  updated_at: timestamp;
+}
+```
+
+### Message
+```typescript
+interface Message {
+  id: string; // UUID
+  relationship_id: string; // FK → relationships
+  sender_type: 'user' | 'character';
+  content: string;
+  metadata?: {
+    emotion?: string;
+    intimacy_change?: number;
+  };
+  created_at: timestamp;
+}
+```
+
+### Episode
+```typescript
+interface Episode {
+  id: string; // UUID
+  character_id: string; // FK → characters
+  episode_number: number;
+  title: string;
+  description: string;
+  required_intimacy: number; // 에피소드 해금 조건
+  scenario_prompt: string; // 에피소드별 특별 시나리오
+  rewards: {
+    intimacy_boost: number;
+    unlocked_content: string[];
+  };
+  created_at: timestamp;
+}
+```
+
+### Save Data
+```typescript
+interface SaveData {
+  id: string; // UUID
+  user_id: string; // FK → users
+  relationship_id: string; // FK → relationships
+  save_name: string;
+  snapshot_data: {
+    intimacy_level: number;
+    current_episode: number;
+    message_count: number;
+    unlocked_secrets: string[];
+  };
+  created_at: timestamp;
+}
+```
+
+## API Endpoints
+
+### Authentication
+* `POST /api/auth/signup` - 회원가입
+* `POST /api/auth/login` - 로그인
+* `POST /api/auth/logout` - 로그아웃
+* `GET /api/auth/session` - 세션 확인
+
+### Characters
+* `GET /api/characters` - 캐릭터 목록 조회
+* `GET /api/characters/:id` - 특정 캐릭터 정보 조회
+* `POST /api/characters/:id/start` - 캐릭터와 관계 시작
+
+### Chat
+* `POST /api/chat/:relationshipId/message` - 메시지 전송 및 AI 응답
+  - Request: `{ content: string }`
+  - Response: `{ message: Message, intimacyChange: number }`
+* `GET /api/chat/:relationshipId/messages` - 대화 내역 조회
+  - Query: `?limit=50&offset=0`
+* `GET /api/chat/:relationshipId/status` - 관계 상태 조회
+
+### Episodes
+* `GET /api/episodes/:characterId` - 캐릭터의 에피소드 목록
+* `GET /api/episodes/:episodeId` - 특정 에피소드 정보
+* `POST /api/episodes/:episodeId/start` - 에피소드 시작
+
+### Save/Load
+* `POST /api/save` - 진행 상황 저장
+  - Request: `{ relationshipId: string, saveName: string }`
+* `GET /api/save/:userId` - 저장된 데이터 목록
+* `POST /api/save/:saveId/load` - 저장된 데이터 불러오기
+
+## User Flows
+
+### 1. 회원가입 및 로그인
+1. 유저가 이메일/비밀번호로 회원가입
+2. Supabase Auth로 인증 처리
+3. 유저 프로필 생성
+4. 캐릭터 선택 화면으로 이동
+
+### 2. 캐릭터 선택 및 관계 시작
+1. 캐릭터 목록 화면에서 캐릭터 카드 확인
+2. 캐릭터 클릭 → 프로필 상세 보기
+3. "대화 시작" 버튼 클릭
+4. Relationship 레코드 생성 (intimacy: 0, episode: 1)
+5. 채팅 화면으로 이동
+
+### 3. 채팅 및 관계 발전
+1. 유저가 메시지 입력
+2. Message 레코드 생성 (sender: user)
+3. API → Openrouter로 요청
+   - System Prompt: 캐릭터 설정 + 현재 친밀도 + 에피소드 정보
+   - User Message: 유저의 메시지
+4. AI 응답 생성
+5. 친밀도 계산 (감정 분석 기반 +1~5)
+6. Message 레코드 생성 (sender: character)
+7. Relationship 업데이트 (intimacy_level)
+8. 화면에 메시지 표시
+
+### 4. 에피소드 진행
+1. 친밀도가 일정 수준 도달 → 새 에피소드 알림
+2. 유저가 에피소드 시작
+3. 에피소드별 특수 시나리오 적용
+4. 에피소드 완료 시 보상 지급
+   - 친밀도 부스트
+   - 비밀/스토리 공개
+
+### 5. 저장 및 불러오기
+1. 유저가 "저장" 버튼 클릭
+2. 현재 상태 스냅샷 생성
+3. SaveData 레코드 생성
+4. "불러오기" → 저장된 상태로 복원
+
+## UI Components
+
+### CharacterCard
+* Props: `{ character: Character }`
+* 캐릭터 아바타, 이름, 간단한 소개
+* 클릭 → 상세 프로필 모달
+
+### CharacterProfile
+* Props: `{ character: Character }`
+* 전체 프로필 정보 표시
+* "대화 시작" 버튼
+
+### ChatInterface
+* Props: `{ relationshipId: string }`
+* 메시지 목록, 입력창, 친밀도 표시
+* 실시간 메시지 업데이트
+
+### MessageBubble
+* Props: `{ message: Message }`
+* 유저/캐릭터 구분 스타일
+* 타임스탬프 표시
+
+### IntimacyProgress
+* Props: `{ intimacy: number, maxIntimacy: number }`
+* 친밀도 진행바
+* 다음 단계까지 필요한 포인트 표시
+
+### EpisodeCard
+* Props: `{ episode: Episode, unlocked: boolean }`
+* 에피소드 제목, 설명
+* 잠금/해금 상태 표시
+
+## Implementation Guidelines
+
+### 1. Database Setup (Supabase)
+```sql
+-- Enable UUID extension
+create extension if not exists "uuid-ossp";
+
+-- Users table (handled by Supabase Auth)
+-- Extended user profiles
+create table profiles (
+  id uuid references auth.users primary key,
+  username text unique not null,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
+
+-- Characters table
+create table characters (
+  id uuid primary key default uuid_generate_v4(),
+  name text not null,
+  age int not null,
+  personality text[] not null,
+  background_story text not null,
+  interests text[] not null,
+  avatar_url text,
+  system_prompt text not null,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
+
+-- Relationships table
+create table relationships (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid references auth.users not null,
+  character_id uuid references characters not null,
+  intimacy_level int default 0 check (intimacy_level >= 0 and intimacy_level <= 100),
+  current_episode int default 1,
+  unlocked_secrets text[] default '{}',
+  relationship_status text default 'stranger',
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now(),
+  unique(user_id, character_id)
+);
+
+-- Messages table
+create table messages (
+  id uuid primary key default uuid_generate_v4(),
+  relationship_id uuid references relationships not null,
+  sender_type text not null check (sender_type in ('user', 'character')),
+  content text not null,
+  metadata jsonb,
+  created_at timestamp with time zone default now()
+);
+
+-- Episodes table
+create table episodes (
+  id uuid primary key default uuid_generate_v4(),
+  character_id uuid references characters not null,
+  episode_number int not null,
+  title text not null,
+  description text not null,
+  required_intimacy int not null,
+  scenario_prompt text not null,
+  rewards jsonb not null,
+  created_at timestamp with time zone default now()
+);
+
+-- Save data table
+create table save_data (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid references auth.users not null,
+  relationship_id uuid references relationships not null,
+  save_name text not null,
+  snapshot_data jsonb not null,
+  created_at timestamp with time zone default now()
+);
+
+-- Indexes for performance
+create index idx_relationships_user on relationships(user_id);
+create index idx_messages_relationship on messages(relationship_id);
+create index idx_episodes_character on episodes(character_id);
+create index idx_save_data_user on save_data(user_id);
+
+-- Row Level Security (RLS)
+alter table profiles enable row level security;
+alter table relationships enable row level security;
+alter table messages enable row level security;
+alter table save_data enable row level security;
+
+-- RLS Policies
+create policy "Users can view own profile"
+  on profiles for select
+  using (auth.uid() = id);
+
+create policy "Users can update own profile"
+  on profiles for update
+  using (auth.uid() = id);
+
+create policy "Users can view own relationships"
+  on relationships for select
+  using (auth.uid() = user_id);
+
+create policy "Users can create own relationships"
+  on relationships for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update own relationships"
+  on relationships for update
+  using (auth.uid() = user_id);
+
+create policy "Users can view messages in their relationships"
+  on messages for select
+  using (
+    exists (
+      select 1 from relationships
+      where relationships.id = messages.relationship_id
+      and relationships.user_id = auth.uid()
+    )
+  );
+
+create policy "Users can create messages in their relationships"
+  on messages for insert
+  with check (
+    exists (
+      select 1 from relationships
+      where relationships.id = messages.relationship_id
+      and relationships.user_id = auth.uid()
+    )
+  );
+
+create policy "Users can view own save data"
+  on save_data for select
+  using (auth.uid() = user_id);
+
+create policy "Users can create own save data"
+  on save_data for insert
+  with check (auth.uid() = user_id);
+```
+
+### 2. Openrouter Integration
+```typescript
+// lib/openrouter/chat.ts
+import { Character, Message } from '@/lib/types';
+
+export async function generateCharacterResponse(
+  character: Character,
+  conversationHistory: Message[],
+  userMessage: string,
+  intimacyLevel: number,
+  currentEpisode: number
+): Promise<{ response: string; intimacyChange: number }> {
+  const systemPrompt = buildSystemPrompt(
+    character,
+    intimacyLevel,
+    currentEpisode
+  );
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...conversationHistory.map(msg => ({
+      role: msg.sender_type === 'user' ? 'user' : 'assistant',
+      content: msg.content
+    })),
+    { role: 'user', content: userMessage }
+  ];
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'openai/gpt-4.1-mini',
+      messages,
+      temperature: 0.8,
+      max_tokens: 500
+    })
+  });
+
+  const data = await response.json();
+  const characterResponse = data.choices[0].message.content;
+
+  // 친밀도 변화 계산 (감정 분석 기반)
+  const intimacyChange = calculateIntimacyChange(userMessage, characterResponse);
+
+  return {
+    response: characterResponse,
+    intimacyChange
+  };
+}
+
+function buildSystemPrompt(
+  character: Character,
+  intimacyLevel: number,
+  currentEpisode: number
+): string {
+  return `
+당신은 ${character.name}입니다.
+
+[캐릭터 정보]
+- 나이: ${character.age}세
+- 성격: ${character.personality.join(', ')}
+- 배경: ${character.background_story}
+- 관심사: ${character.interests.join(', ')}
+
+[현재 상황]
+- 친밀도: ${intimacyLevel}/100 (${getRelationshipStatus(intimacyLevel)})
+- 에피소드: ${currentEpisode}
+
+[행동 지침]
+1. 캐릭터의 성격과 배경에 맞게 자연스럽게 대화하세요.
+2. 친밀도에 따라 대화 스타일을 조정하세요:
+   - 0-20: 조심스럽고 격식 있는 태도
+   - 21-50: 친근하지만 거리감 유지
+   - 51-80: 편안하고 개인적인 이야기 공유
+   - 81-100: 깊은 신뢰와 특별한 관계
+3. 유저의 감정과 의도를 파악하고 공감적으로 반응하세요.
+4. 자연스러운 한국어로 답변하세요.
+5. 한 번에 2-4문장 정도로 답변하세요.
+
+${character.system_prompt}
+  `.trim();
+}
+
+function calculateIntimacyChange(
+  userMessage: string,
+  characterResponse: string
+): number {
+  // 간단한 휴리스틱 기반 친밀도 계산
+  // 실제 구현에서는 감정 분석 API 사용 가능
+  let change = 1; // 기본 증가량
+
+  // 긍정적 키워드 감지
+  const positiveKeywords = ['좋아', '고마워', '행복', '즐거워', '사랑', '감사'];
+  const negativeKeywords = ['싫어', '화나', '슬퍼', '미워'];
+
+  for (const keyword of positiveKeywords) {
+    if (userMessage.includes(keyword)) {
+      change += 1;
+      break;
+    }
+  }
+
+  for (const keyword of negativeKeywords) {
+    if (userMessage.includes(keyword)) {
+      change -= 1;
+      break;
+    }
+  }
+
+  return Math.max(0, Math.min(5, change)); // 0-5 범위로 제한
+}
+
+function getRelationshipStatus(intimacy: number): string {
+  if (intimacy < 20) return '낯선 사이';
+  if (intimacy < 40) return '아는 사이';
+  if (intimacy < 60) return '친구';
+  if (intimacy < 80) return '가까운 친구';
+  return '특별한 관계';
+}
+```
+
+### 3. Development Phases
+
+#### Phase 1: Foundation (Week 1-2)
+* ✅ Next.js 프로젝트 설정
+* ✅ Supabase 프로젝트 생성 및 데이터베이스 스키마 구축
+* ✅ 인증 시스템 구현 (회원가입, 로그인)
+* ✅ 기본 UI 컴포넌트 라이브러리 구축
+
+#### Phase 2: Core Features (Week 3-4)
+* ✅ 캐릭터 관리 시스템
+* ✅ 채팅 인터페이스 구현
+* ✅ Openrouter AI 통합
+* ✅ 친밀도 시스템 구현
+
+#### Phase 3: Advanced Features (Week 5-6)
+* ✅ 에피소드 시스템
+* ✅ 저장/불러오기 기능
+* ✅ 관계 상태 시각화
+* ✅ 알림 시스템
+
+#### Phase 4: Polish & Testing (Week 7-8)
+* ✅ UI/UX 개선
+* ✅ 성능 최적화
+* ✅ 테스트 및 버그 수정
+* ✅ 배포 준비
+
+### 4. Security Considerations
+* ✅ Row Level Security (RLS) 활성화
+* ✅ API 키 환경변수 관리
+* ✅ CORS 설정
+* ✅ Rate limiting 구현
+* ✅ Input validation 및 sanitization
+* ✅ XSS/CSRF 방어
+
+### 5. Performance Optimization
+* ✅ 메시지 페이지네이션 (무한 스크롤)
+* ✅ 이미지 최적화 (Next.js Image)
+* ✅ API 응답 캐싱
+* ✅ Lazy loading
+* ✅ Code splitting
+
+## Success Metrics
+* 유저 가입률 및 retention rate
+* 평균 대화 길이 (메시지 수)
+* 캐릭터별 인기도
+* 에피소드 완료율
+* 유저 만족도 (피드백 기반)
